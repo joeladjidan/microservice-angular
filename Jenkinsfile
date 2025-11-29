@@ -8,49 +8,45 @@ pipeline {
   }
 
   parameters {
-    string(name: 'BRANCH', defaultValue: 'main', description: 'Branche Git à builder')
+    string(name: 'BRANCH', defaultValue: 'master', description: 'Branche Git à builder')
     string(name: 'MVN_GOALS', defaultValue: 'clean verify', description: 'Goals Maven à exécuter')
     booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Ignorer les tests')
-    // Optionnel: nom d'une installation Maven configurée dans Jenkins (laisser vide pour utiliser mvn du PATH)
     string(name: 'MAVEN_TOOL', defaultValue: '', description: 'Nom de l installation Maven configurée dans Jenkins (optionnel)')
-    // Optionnel: nom d'une installation JDK configurée dans Jenkins (laisser vide pour utiliser le JDK système)
     string(name: 'JDK_TOOL', defaultValue: '', description: 'Nom de l installation JDK configurée dans Jenkins (optionnel)')
+    string(name: 'NODE_TOOL', defaultValue: '', description: 'Nom de l installation NodeJS configurée dans Jenkins (optionnel)')
+    string(name: 'NPM_CREDENTIAL_ID', defaultValue: '', description: 'ID credential (Secret text) contenant le token NPM (optionnel)')
+    string(name: 'FRONTEND_DIR', defaultValue: 'frontend', description: 'Répertoire du projet frontend relatif à la racine')
   }
 
   environment {
     MVN_FLAGS = "-B"
-    REPO_URL  = "https://github.com/joeladjidan/codingame-java17.git"
-    // NOTE: créez un credential Jenkins (Username with password) contenant votre nom GitHub
-    // comme username et un Personal Access Token (PAT) comme password, puis mettez son ID ci-dessous
+    REPO_URL  = "https://github.com/joeladjidan/microservice-angular.git"
     GIT_CREDENTIALS_ID = 'github-token'
   }
 
   stages {
     stage('Checkout') {
       steps {
-        // Utilise les credentials Jenkins pour le checkout HTTPS (évite l'erreur d'authentification)
         checkout([$class: 'GitSCM', branches: [[name: "refs/heads/${params.BRANCH}"]],
                   userRemoteConfigs: [[url: env.REPO_URL, credentialsId: env.GIT_CREDENTIALS_ID]]])
       }
     }
 
-    stage('Build') {
+    stage('Setup Tools') {
       steps {
         script {
-          // Si l'utilisateur a fourni un outil Maven configuré dans Jenkins, on l'utilise.
           if (params.MAVEN_TOOL?.trim()) {
             try {
               def mvnHome = tool name: params.MAVEN_TOOL, type: 'maven'
               env.PATH = "${mvnHome}/bin;${env.PATH}"
               echo "Using Maven tool '${params.MAVEN_TOOL}' at ${mvnHome}"
             } catch (err) {
-              echo "Maven tool '${params.MAVEN_TOOL}' not found in Jenkins configuration, falling back to system 'mvn'"
+              echo "Maven tool '${params.MAVEN_TOOL}' not found, using system 'mvn'"
             }
           } else {
             echo "No MAVEN_TOOL provided; using 'mvn' from PATH"
           }
 
-          // Si l'utilisateur a fourni un JDK configuré dans Jenkins, on l'utilise.
           if (params.JDK_TOOL?.trim()) {
             try {
               def javaHome = tool name: params.JDK_TOOL, type: 'jdk'
@@ -58,12 +54,86 @@ pipeline {
               env.PATH = "${javaHome}/bin;${env.PATH}"
               echo "Using JDK tool '${params.JDK_TOOL}' at ${javaHome}"
             } catch (err) {
-              echo "JDK tool '${params.JDK_TOOL}' not found in Jenkins configuration, falling back to system Java"
+              echo "JDK tool '${params.JDK_TOOL}' not found, using system Java"
             }
           } else {
             echo "No JDK_TOOL provided; using system Java"
           }
 
+          if (params.NODE_TOOL?.trim()) {
+            try {
+              def nodeHome = tool name: params.NODE_TOOL, type: 'nodejs'
+              env.PATH = "${nodeHome}/bin;${env.PATH}"
+              echo "Using Node tool '${params.NODE_TOOL}' at ${nodeHome}"
+            } catch (err) {
+              echo "Node tool '${params.NODE_TOOL}' not found in Jenkins configuration, using system Node/npm"
+            }
+          } else {
+            echo "No NODE_TOOL provided; using system Node/npm"
+          }
+        }
+      }
+    }
+
+    stage('Frontend Build') {
+      when {
+        expression { return params.BUILD_FRONTEND }
+      }
+      steps {
+        script {
+          def frontendDir = params.FRONTEND_DIR?.trim() ?: 'frontend'
+          if (!fileExists(frontendDir)) {
+            echo "Frontend directory '${frontendDir}' not found, skipping frontend build"
+          } else {
+            if (params.NPM_CREDENTIAL_ID?.trim()) {
+              withCredentials([string(credentialsId: params.NPM_CREDENTIAL_ID, variable: 'NPM_TOKEN')]) {
+                if (isUnix()) {
+                  sh """
+                    set -e
+                    cd ${frontendDir}
+                    printf "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}\n" > .npmrc
+                  """
+                } else {
+                  bat """
+                    cd ${frontendDir}
+                    echo //registry.npmjs.org/:_authToken=%NPM_TOKEN% > .npmrc
+                  """
+                }
+              }
+            } else {
+              echo "No NPM_CREDENTIAL_ID set; assuming public registry or preconfigured auth"
+            }
+
+            if (isUnix()) {
+              sh """
+                set -e
+                cd ${frontendDir}
+                if [ -f package-lock.json ]; then
+                  npm ci --prefer-offline
+                else
+                  npm install --prefer-offline
+                fi
+                npm run build --if-present
+              """
+            } else {
+              bat """
+                cd ${frontendDir}
+                if exist package-lock.json (
+                  npm ci --prefer-offline
+                ) else (
+                  npm install --prefer-offline
+                )
+                call npm run build --if-present
+              """
+            }
+          }
+        }
+      }
+    }
+
+    stage('Build Backend (Maven)') {
+      steps {
+        script {
           def skipArg = params.SKIP_TESTS ? '-DskipTests=true' : ''
           def mavenCommand = "${env.MVN_FLAGS} ${params.MVN_GOALS} ${skipArg}"
           if (isUnix()) {
@@ -83,7 +153,19 @@ pipeline {
 
     stage('Archive') {
       steps {
-        archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true
+        script {
+          archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true
+          def frontendDistGlob = "${params.FRONTEND_DIR}/dist/**"
+          if (fileExists(params.FRONTEND_DIR)) {
+            try {
+              archiveArtifacts artifacts: frontendDistGlob, fingerprint: true
+            } catch (e) {
+              echo "No frontend dist artifacts to archive (pattern: ${frontendDistGlob})"
+            }
+          } else {
+            echo "Frontend directory '${params.FRONTEND_DIR}' not found, skipping artifact archiving"
+          }
+        }
       }
     }
   }

@@ -74,7 +74,6 @@ start_bg() {
   local workdir="$1"; shift
   local logfile="$1"; shift
   local cmd="$*"
-  # Use bash -c so redirections and cd are handled in the backgrounded shell
   nohup bash -lc "cd \"${workdir}\" && ${cmd}" >"${logfile}" 2>&1 &
   local pid=$!
   echo "$pid"
@@ -95,7 +94,6 @@ done
 
 # Démarrer le client Angular (client-gateway / portail-ui)
 if [[ $SKIP_ANGULAR -eq 0 ]]; then
-  # support both ancien nom "client-gateway" et nouveau "portail-ui"
   CLIENT_DIR=""
   CLIENT_NAME=""
   if [[ -d "$ROOT_DIR/portail-ui" ]]; then
@@ -105,23 +103,74 @@ if [[ $SKIP_ANGULAR -eq 0 ]]; then
     CLIENT_DIR="$ROOT_DIR/client-gateway"
     CLIENT_NAME="client-gateway"
   fi
+
   if [[ -n "$CLIENT_DIR" && -d "$CLIENT_DIR" ]]; then
     CLIENT_LOG="$LOGS_DIR/${CLIENT_NAME}.log"
     echo "Démarrage du client Angular (${CLIENT_NAME}) (logs: $CLIENT_LOG)"
-    # install dependencies synchronously in client dir
-    if [[ -f "$CLIENT_DIR/yarn.lock" ]] && command -v yarn >/dev/null 2>&1; then
-      echo "Installation avec yarn..."
-      (cd "$CLIENT_DIR" && yarn install --silent) || (cd "$CLIENT_DIR" && npm install --silent)
-    else
-      (cd "$CLIENT_DIR" && npm install --silent)
+
+    # Robust install function: try yarn/npm ci/npm install, capture output, detect E404
+    install_client_deps() {
+      local workdir="$1"
+      local max_attempts=2
+      local attempt=1
+      local rc=1
+      local outfile="$workdir/.install_last.log"
+
+      while [[ $attempt -le $max_attempts ]]; do
+        echo "Install: attempt $attempt/$max_attempts"
+        if [[ -f "$workdir/yarn.lock" && command -v yarn >/dev/null 2>&1 ]]; then
+          bash -lc "cd \"${workdir}\" && yarn install --silent --frozen-lockfile" >"$outfile" 2>&1 && rc=0 || rc=$?
+          if [[ $rc -eq 0 ]]; then return 0; fi
+          echo "yarn failed, fallback to npm (see $outfile)"
+        fi
+
+        if [[ -f "$workdir/package-lock.json" ]]; then
+          bash -lc "cd \"${workdir}\" && npm ci --silent" >"$outfile" 2>&1 && rc=0 || rc=$?
+          if [[ $rc -eq 0 ]]; then return 0; fi
+        fi
+
+        bash -lc "cd \"${workdir}\" && npm install --silent --legacy-peer-deps" >"$outfile" 2>&1 && rc=0 || rc=$?
+        if [[ $rc -eq 0 ]]; then return 0; fi
+
+        # check for npm 404 / E404 in log
+        if grep -E "E404|404 Not Found|Not found" "$outfile" >/dev/null 2>&1; then
+          echo "Erreur d'installation: paquet introuvable (E404). Voir $outfile pour détails."
+          echo "Vérifiez :"
+          echo " - \`$workdir/.npmrc\` ou la configuration du registry"
+          echo " - vos identifiants d'accès au registre privé (authToken)"
+          echo "Exemples :"
+          echo "  npm set registry https://registry.npmjs.org/"
+          echo "  ou configurez le registry privé dans .npmrc"
+          return 2
+        fi
+
+        attempt=$((attempt + 1))
+        sleep 1
+      done
+
+      return $rc
+    }
+
+    # run installation
+    echo "Installation des dépendances client..."
+    install_client_deps "$CLIENT_DIR"
+    install_rc=$?
+    if [[ $install_rc -eq 2 ]]; then
+      echo "Installation échouée à cause d'un paquet introuvable. Angular sera ignoré."
+      SKIP_ANGULAR=1
+    elif [[ $install_rc -ne 0 ]]; then
+      echo "Installation des dépendances échouée (code $install_rc). Consulter $CLIENT_DIR/.install_last.log"
+      echo "Pour forcer la suite sans client, relancer avec --skip-angular"
+      SKIP_ANGULAR=1
     fi
+
     # Auto-fix angular.json if tsConfig missing
-    echo "Vérification de angular.json pour tsConfig..."
-    ANGULAR_JSON_PATH="$CLIENT_DIR/angular.json"
-    # Try Python first, then Node.js as fallback
-    if command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1; then
-      PY=$(command -v python3 || command -v python)
-      "$PY" - <<PY || true
+    if [[ $SKIP_ANGULAR -eq 0 ]]; then
+      echo "Vérification de angular.json pour tsConfig..."
+      ANGULAR_JSON_PATH="$CLIENT_DIR/angular.json"
+      if command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1; then
+        PY=$(command -v python3 || command -v python)
+        "$PY" - <<PY || true
 import json,sys
 path = r'${ANGULAR_JSON_PATH}'
 try:
@@ -148,18 +197,19 @@ if 'tsConfig' not in opts:
 else:
     print('ok')
 PY
-    elif command -v node >/dev/null 2>&1; then
-      node -e "const fs=require('fs');const p='${ANGULAR_JSON_PATH}';try{let s=fs.readFileSync(p,'utf8');let d=JSON.parse(s);let proj=d.projects&&d.projects['${CLIENT_NAME}'];if(!proj)process.exit(0);let arch=proj.architect||{};let build=arch.build||{};let opts=build.options||{};if(!('tsConfig' in opts)){opts.tsConfig='tsconfig.app.json';build.options=opts;arch.build=build;proj.architect=arch;d.projects['${CLIENT_NAME}']=proj;fs.writeFileSync(p,JSON.stringify(d,null,2));console.log('patched');}else console.log('ok');}catch(e){}"
-    else
-      echo "Aucun interpréteur Python/Node disponible : je ne peux pas appliquer automatiquement la correction d'angular.json."
-      echo "Veuillez vérifier que '${CLIENT_NAME}/angular.json' contient 'projects.${CLIENT_NAME}.build.options.tsConfig' ou exécuter :"
-      echo "  node -e \"const fs=require('fs');const p='${ANGULAR_JSON_PATH}';let d=JSON.parse(fs.readFileSync(p));d.projects['${CLIENT_NAME}'].architect.build.options.tsConfig='tsconfig.app.json';fs.writeFileSync(p,JSON.stringify(d,null,2));\""
-    fi
-    # create proxy.conf.json if missing (default points to gateway localhost:8080)
-    PROXY_FILE="$CLIENT_DIR/proxy.conf.json"
-    if [[ ! -f "$PROXY_FILE" ]]; then
-      echo "Création de $PROXY_FILE (proxy /api -> http://localhost:8080)"
-      cat >"$PROXY_FILE" <<EOF
+      elif command -v node >/dev/null 2>&1; then
+        node -e "const fs=require('fs');const p='${ANGULAR_JSON_PATH}';try{let s=fs.readFileSync(p,'utf8');let d=JSON.parse(s);let proj=d.projects&&d.projects['${CLIENT_NAME}'];if(!proj)process.exit(0);let arch=proj.architect||{};let build=arch.build||{};let opts=build.options||{};if(!('tsConfig' in opts)){opts.tsConfig='tsconfig.app.json';build.options=opts;arch.build=build;proj.architect=arch;d.projects['${CLIENT_NAME}']=proj;fs.writeFileSync(p,JSON.stringify(d,null,2));console.log('patched');}else console.log('ok');}catch(e){}"
+      else
+        echo "Aucun interpréteur Python/Node disponible : je ne peux pas appliquer automatiquement la correction d'angular.json."
+        echo "Veuillez vérifier que '${CLIENT_NAME}/angular.json' contient 'projects.${CLIENT_NAME}.build.options.tsConfig' ou exécuter :"
+        echo "  node -e \"const fs=require('fs');const p='${ANGULAR_JSON_PATH}';let d=JSON.parse(fs.readFileSync(p));d.projects['${CLIENT_NAME}'].architect.build.options.tsConfig='tsconfig.app.json';fs.writeFileSync(p,JSON.stringify(d,null,2));\""
+      fi
+
+      # create proxy.conf.json if missing (default points to gateway localhost:8080)
+      PROXY_FILE="$CLIENT_DIR/proxy.conf.json"
+      if [[ ! -f "$PROXY_FILE" ]]; then
+        echo "Création de $PROXY_FILE (proxy /api -> http://localhost:8080)"
+        cat >"$PROXY_FILE" <<EOF
 {
   "/api": {
     "target": "http://localhost:8080",
@@ -169,25 +219,24 @@ PY
   }
 }
 EOF
-    fi
-    if [[ $FOREGROUND -eq 1 ]]; then
-      # Run client in foreground (useful for development) and stream logs to console
-      echo "Lancement du client au premier plan (CTRL+C pour arrêter)"
-      cd "$CLIENT_DIR"
-      # Use npx to ensure local CLI is used; do not background
-      if [[ -n "$PORT" ]]; then
-        npx ng serve --host 0.0.0.0 --port "$PORT"
-      else
-        npx ng serve --host 0.0.0.0
       fi
-    else
-      # start dev server in background and capture pid
-      if [[ -n "$PORT" ]]; then
-        client_pid=$(start_bg "$CLIENT_DIR" "$CLIENT_LOG" "npx ng serve --host 0.0.0.0 --port $PORT")
+
+      if [[ $FOREGROUND -eq 1 ]]; then
+        echo "Lancement du client au premier plan (CTRL+C pour arrêter)"
+        cd "$CLIENT_DIR"
+        if [[ -n "$PORT" ]]; then
+          npx ng serve --host 0.0.0.0 --port "$PORT"
+        else
+          npx ng serve --host 0.0.0.0
+        fi
       else
-        client_pid=$(start_bg "$CLIENT_DIR" "$CLIENT_LOG" "npx ng serve --host 0.0.0.0")
-      fi
+        if [[ -n "$PORT" ]]; then
+          client_pid=$(start_bg "$CLIENT_DIR" "$CLIENT_LOG" "npx ng serve --host 0.0.0.0 --port $PORT")
+        else
+          client_pid=$(start_bg "$CLIENT_DIR" "$CLIENT_LOG" "npx ng serve --host 0.0.0.0")
+        fi
         PIDS+=("$client_pid")
+      fi
     fi
   else
     echo "client Angular introuvable (ni portail-ui ni client-gateway), skip..."
