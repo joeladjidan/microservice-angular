@@ -1,0 +1,33 @@
+
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  cloud:
+    gateway:
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+            allowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
+            allowedHeaders: ["*"]
+            maxAge: 3600
+      routes:
+        - id: customer_route
+          uri: http://customer-service:8081
+          predicates: [ Path=/api/customers/** ]
+          filters:
+            - StripPrefix=1
+        - id: order_route
+          uri: http://order-service:8082
+          predicates: [ Path=/api/orders/** ]
+          filters:
+            - StripPrefix=1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"

@@ -1,0 +1,53 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------< com.joeladjidan.anstic:file-processor >----------------
+[INFO] Building file-processor 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:3.3.5:run (default-cli) > test-compile @ file-processor >>>
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ file-processor ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ file-processor ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 12 source files with javac [debug parameters release 17] to target\classes
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /D:/Travails/springboot-kafka-angular/file-processor/src/main/java/com/joeladjidan/anstic/fileprocessor/batch/FileProcessingJobConfig.java:[19,53] cannot find symbol
+  symbol:   class PassThroughLineTokenizer
+  location: package org.springframework.batch.item.file.transform
+[ERROR] /D:/Travails/springboot-kafka-angular/file-processor/src/main/java/com/joeladjidan/anstic/fileprocessor/batch/FileProcessingJobConfig.java:[94,62] cannot find symbol
+  symbol:   class LineTokenizer
+  location: class com.joeladjidan.anstic.fileprocessor.batch.FileProcessingJobConfig
+[ERROR] /D:/Travails/springboot-kafka-angular/file-processor/src/main/java/com/joeladjidan/anstic/fileprocessor/batch/FileProcessingJobConfig.java:[96,16] cannot find symbol
+  symbol:   class FieldSet
+  location: class com.joeladjidan.anstic.fileprocessor.batch.FileProcessingJobConfig.PassThroughLineTokenizer
+[INFO] 3 errors 
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  19.085 s
+[INFO] Finished at: 2025-11-19T00:34:07+01:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project file-processor: Compilation failure: Compilation failure: 
+[ERROR] /D:/Travails/springboot-kafka-angular/file-processor/src/main/java/com/joeladjidan/anstic/fileprocessor/batch/FileProcessingJobConfig.java:[19,53] cannot find symbol
+[ERROR]   symbol:   class PassThroughLineTokenizer
+[ERROR]   location: package org.springframework.batch.item.file.transform
+[ERROR] /D:/Travails/springboot-kafka-angular/file-processor/src/main/java/com/joeladjidan/anstic/fileprocessor/batch/FileProcessingJobConfig.java:[94,62] cannot find symbol
+[ERROR]   symbol:   class LineTokenizer
+[ERROR]   location: class com.joeladjidan.anstic.fileprocessor.batch.FileProcessingJobConfig
+[ERROR] /D:/Travails/springboot-kafka-angular/file-processor/src/main/java/com/joeladjidan/anstic/fileprocessor/batch/FileProcessingJobConfig.java:[96,16] cannot find symbol
+[ERROR]   symbol:   class FieldSet
+[ERROR]   location: class com.joeladjidan.anstic.fileprocessor.batch.FileProcessingJobConfig.PassThroughLineTokenizer
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

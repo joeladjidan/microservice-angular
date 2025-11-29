@@ -1,0 +1,44 @@
+server:
+  port: 8082
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/orders_db?allowPublicKeyRetrieval=true&useSSL=false&createDatabaseIfNotExist=true&serverTimezone=UTC}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate.format_sql: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:order-service-group}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    listener:
+      missing-topics-fatal: false
+gateway:
+  base-url: ${GATEWAY_URL:http://localhost:8080}
+
+order:
+  file:
+    chunk-size: 1000
+    timeout-seconds: 300
+    pool:
+      core-size: 4
+      max-size: 8
+      queue-capacity: 100
+
+info:
+  app:
+    name: ${APP_NAME:order-service}
+    # Use Maven resource filtering token @project.version@ so build injects POM version;
+    # at runtime Spring will use APP_VERSION env var if set, otherwise the injected value.
+    version: ${APP_VERSION:@project.version@}
