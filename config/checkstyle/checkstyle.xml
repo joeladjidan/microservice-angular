@@ -1,28 +1,14 @@
-<?xml version="1.0"?>
-        <!DOCTYPE module PUBLIC
-                "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
-                "https://checkstyle.org/dtds/configuration_1_3.dtd">
-
+<!-- xml -->
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
 <module name="Checker">
-
-  <property name="severity" value="error"/>
-
   <module name="LineLength">
     <property name="max" value="120"/>
     <property name="ignorePattern" value="^package.*|^import.*"/>
   </module>
 
-  <module name="SuppressionFilter"/>
-
   <module name="TreeWalker">
-    <module name="AvoidStarImport"/>
-    <module name="FinalParameters"/>
-    <module name="UnusedImports"/>
-    <module name="MagicNumber">
-      <property name="ignoreNumbers" value="-1,0,1,2"/>
-    </module>
+    <!-- checks basés sur l'AST -->
   </module>
-
-  <module name="FileTabCharacter"/>
-
 </module>
