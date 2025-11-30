@@ -168,13 +168,21 @@ pipeline {
           def skipArg = params.SKIP_TESTS ? '-DskipTests=true' : ''
           def mavenCommand = "${env.MVN_FLAGS} ${params.MVN_GOALS} ${skipArg}"
 
+          // Recherche portable du premier pom.xml (remplace findFiles)
           def mvnDir = '.'
           if (!fileExists('pom.xml')) {
-            def poms = findFiles(glob: '**/pom.xml')
-            if (poms.length == 0) {
+            def pomPath = ''
+            if (isUnix()) {
+              pomPath = sh(script: "find . -name pom.xml -print | head -n 1", returnStdout: true).trim()
+            } else {
+              pomPath = powershell(returnStdout: true, script: "Get-ChildItem -Path . -Filter pom.xml -Recurse -File | Select-Object -First 1 -ExpandProperty FullName").trim()
+            }
+            if (!pomPath) {
               error "Aucun `pom.xml` trouvé dans l'espace de travail. La build Maven est annulée."
             }
-            mvnDir = poms[0].path - 'pom.xml'
+            // normaliser séparateurs et retirer '/pom.xml'
+            pomPath = pomPath.replaceAll('\\\\','/')
+            mvnDir = pomPath - '/pom.xml'
             if (mvnDir == '') { mvnDir = '.' }
           }
           echo "Running Maven in: ${mvnDir}"
