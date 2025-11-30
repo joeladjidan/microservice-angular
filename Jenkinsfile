@@ -9,7 +9,7 @@ pipeline {
   }
 
   parameters {
-    string(name: 'BRANCH', defaultValue: 'main', description: 'Branche Git à builder')
+    string(name: 'BRANCH', defaultValue: 'master', description: 'Branche Git à builder')
     string(name: 'MVN_GOALS', defaultValue: 'clean verify', description: 'Goals Maven à exécuter')
     booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Ignorer les tests')
     string(name: 'MAVEN_TOOL', defaultValue: '', description: 'Nom de l installation Maven configurée dans Jenkins (optionnel)')
