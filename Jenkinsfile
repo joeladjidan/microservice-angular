@@ -68,7 +68,7 @@ pipeline {
               env.PATH = "${nodeHome}/bin;${env.PATH}"
               echo "Using Node tool '${params.NODE_TOOL}' at ${nodeHome}"
             } catch (err) {
-              echo "Node tool '${params.NODE_TOOL}' not found in Jenkins configuration, using system Node/npm"
+              echo "Node tool '${params.NODE_TOOL}' not found; using system Node/npm"
             }
           } else {
             echo "No NODE_TOOL provided; using system Node/npm"
@@ -125,7 +125,6 @@ pipeline {
                     """
                   }
                 } finally {
-                  // Cleanup .npmrc to avoid leaking token
                   if (isUnix()) {
                     sh "cd ${frontendDir} || exit 0; rm -f .npmrc"
                   } else {
@@ -169,7 +168,6 @@ pipeline {
           def skipArg = params.SKIP_TESTS ? '-DskipTests=true' : ''
           def mavenCommand = "${env.MVN_FLAGS} ${params.MVN_GOALS} ${skipArg}"
 
-          // Detect pom.xml location; if absent, search recursively
           def mvnDir = '.'
           if (!fileExists('pom.xml')) {
             def poms = findFiles(glob: '**/pom.xml')
@@ -180,7 +178,6 @@ pipeline {
             if (mvnDir == '') { mvnDir = '.' }
           }
           echo "Running Maven in: ${mvnDir}"
-
           dir(mvnDir) {
             if (isUnix()) {
               sh "mvn ${mavenCommand}"
