@@ -1,38 +1,28 @@
 <?xml version="1.0"?>
-<!DOCTYPE module PUBLIC
-        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
-        "config/checkstyle/configuration_1_3.dtd">
+        <!DOCTYPE module PUBLIC
+                "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+                "https://checkstyle.org/dtds/configuration_1_3.dtd">
 
 <module name="Checker">
 
-  <!-- Exemples de modules au niveau Checker -->
   <property name="severity" value="error"/>
 
-  <!-- LineLength doit être enfant direct de Checker (FileSetCheck) -->
   <module name="LineLength">
     <property name="max" value="120"/>
     <property name="ignorePattern" value="^package.*|^import.*"/>
   </module>
 
-  <!-- Autres modules au niveau Checker -->
   <module name="SuppressionFilter"/>
 
-  <!-- TreeWalker pour les checks basés sur l'AST -->
   <module name="TreeWalker">
-
-    <!-- Exemples de checks AST -->
     <module name="AvoidStarImport"/>
     <module name="FinalParameters"/>
     <module name="UnusedImports"/>
     <module name="MagicNumber">
       <property name="ignoreNumbers" value="-1,0,1,2"/>
     </module>
-
-    <!-- ajouter ici vos autres checks valides pour TreeWalker -->
-
   </module>
 
-  <!-- Autres FileSetChecks éventuels -->
   <module name="FileTabCharacter"/>
 
 </module>
