@@ -1,39 +1,38 @@
 <?xml version="1.0"?>
 <!DOCTYPE module PUBLIC
-    "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
-    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "config/checkstyle/configuration_1_3.dtd">
 
 <module name="Checker">
-  <property name="charset" value="UTF-8"/>
 
-  <!-- Basic checks outside TreeWalker -->
-  <module name="FileTabCharacter">
-    <property name="eachLine" value="true"/>
+  <!-- Exemples de modules au niveau Checker -->
+  <property name="severity" value="error"/>
+
+  <!-- LineLength doit être enfant direct de Checker (FileSetCheck) -->
+  <module name="LineLength">
+    <property name="max" value="120"/>
+    <property name="ignorePattern" value="^package.*|^import.*"/>
   </module>
-  <module name="NewlineAtEndOfFile"/>
 
+  <!-- Autres modules au niveau Checker -->
+  <module name="SuppressionFilter"/>
+
+  <!-- TreeWalker pour les checks basés sur l'AST -->
   <module name="TreeWalker">
-    <!-- Avoid wildcard imports -->
+
+    <!-- Exemples de checks AST -->
     <module name="AvoidStarImport"/>
-
-    <!-- Indentation rules: 4 spaces -->
-    <module name="Indentation">
-      <property name="basicOffset" value="4"/>
-      <property name="tabWidth" value="4"/>
-      <property name="lineWrappingIndentation" value="8"/>
+    <module name="FinalParameters"/>
+    <module name="UnusedImports"/>
+    <module name="MagicNumber">
+      <property name="ignoreNumbers" value="-1,0,1,2"/>
     </module>
 
-    <!-- Limit line length but ignore package/import lines -->
-    <module name="LineLength">
-      <property name="max" value="120"/>
-      <property name="ignorePattern" value="^package .*|^import .*"/>
-    </module>
+    <!-- ajouter ici vos autres checks valides pour TreeWalker -->
 
-    <!-- Basic whitespace checks -->
-    <module name="WhitespaceAfter"/>
-    <module name="WhitespaceAround"/>
-
-    <!-- Javadoc and header enforcement are intentionally omitted for now -->
   </module>
-</module>
 
+  <!-- Autres FileSetChecks éventuels -->
+  <module name="FileTabCharacter"/>
+
+</module>
