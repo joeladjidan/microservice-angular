@@ -1,3 +1,4 @@
+// groovy
 pipeline {
   agent any
 
@@ -8,11 +9,12 @@ pipeline {
   }
 
   parameters {
-    string(name: 'BRANCH', defaultValue: 'master', description: 'Branche Git à builder')
+    string(name: 'BRANCH', defaultValue: 'main', description: 'Branche Git à builder')
     string(name: 'MVN_GOALS', defaultValue: 'clean verify', description: 'Goals Maven à exécuter')
     booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Ignorer les tests')
     string(name: 'MAVEN_TOOL', defaultValue: '', description: 'Nom de l installation Maven configurée dans Jenkins (optionnel)')
     string(name: 'JDK_TOOL', defaultValue: '', description: 'Nom de l installation JDK configurée dans Jenkins (optionnel)')
+    booleanParam(name: 'BUILD_FRONTEND', defaultValue: true, description: 'Construire le frontend Angular (si présent)')
     string(name: 'NODE_TOOL', defaultValue: '', description: 'Nom de l installation NodeJS configurée dans Jenkins (optionnel)')
     string(name: 'NPM_CREDENTIAL_ID', defaultValue: '', description: 'ID credential (Secret text) contenant le token NPM (optionnel)')
     string(name: 'FRONTEND_DIR', defaultValue: 'frontend', description: 'Répertoire du projet frontend relatif à la racine')
@@ -83,48 +85,78 @@ pipeline {
         script {
           def frontendDir = params.FRONTEND_DIR?.trim() ?: 'frontend'
           if (!fileExists(frontendDir)) {
-            echo "Frontend directory '${frontendDir}' not found, skipping frontend build"
+            echo "Frontend directory `${frontendDir}` not found, skipping frontend build"
           } else {
             if (params.NPM_CREDENTIAL_ID?.trim()) {
               withCredentials([string(credentialsId: params.NPM_CREDENTIAL_ID, variable: 'NPM_TOKEN')]) {
-                if (isUnix()) {
-                  sh """
-                    set -e
-                    cd ${frontendDir}
-                    printf "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}\n" > .npmrc
-                  """
-                } else {
-                  bat """
-                    cd ${frontendDir}
-                    echo //registry.npmjs.org/:_authToken=%NPM_TOKEN% > .npmrc
-                  """
+                try {
+                  if (isUnix()) {
+                    sh """
+                      set -e
+                      cd ${frontendDir}
+                      printf "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}\n" > .npmrc
+                    """
+                  } else {
+                    bat """
+                      cd ${frontendDir}
+                      echo //registry.npmjs.org/:_authToken=%NPM_TOKEN% > .npmrc
+                    """
+                  }
+                  if (isUnix()) {
+                    sh """
+                      set -e
+                      cd ${frontendDir}
+                      if [ -f package-lock.json ]; then
+                        npm ci --prefer-offline
+                      else
+                        npm install --prefer-offline
+                      fi
+                      npm run build --if-present
+                    """
+                  } else {
+                    bat """
+                      cd ${frontendDir}
+                      if exist package-lock.json (
+                        npm ci --prefer-offline
+                      ) else (
+                        npm install --prefer-offline
+                      )
+                      call npm run build --if-present
+                    """
+                  }
+                } finally {
+                  // Cleanup .npmrc to avoid leaking token
+                  if (isUnix()) {
+                    sh "cd ${frontendDir} || exit 0; rm -f .npmrc"
+                  } else {
+                    bat "cd ${frontendDir} && if exist .npmrc del /q .npmrc"
+                  }
                 }
               }
             } else {
               echo "No NPM_CREDENTIAL_ID set; assuming public registry or preconfigured auth"
-            }
-
-            if (isUnix()) {
-              sh """
-                set -e
-                cd ${frontendDir}
-                if [ -f package-lock.json ]; then
-                  npm ci --prefer-offline
-                else
-                  npm install --prefer-offline
-                fi
-                npm run build --if-present
-              """
-            } else {
-              bat """
-                cd ${frontendDir}
-                if exist package-lock.json (
-                  npm ci --prefer-offline
-                ) else (
-                  npm install --prefer-offline
-                )
-                call npm run build --if-present
-              """
+              if (isUnix()) {
+                sh """
+                  set -e
+                  cd ${frontendDir}
+                  if [ -f package-lock.json ]; then
+                    npm ci --prefer-offline
+                  else
+                    npm install --prefer-offline
+                  fi
+                  npm run build --if-present
+                """
+              } else {
+                bat """
+                  cd ${frontendDir}
+                  if exist package-lock.json (
+                    npm ci --prefer-offline
+                  ) else (
+                    npm install --prefer-offline
+                  )
+                  call npm run build --if-present
+                """
+              }
             }
           }
         }
@@ -136,10 +168,25 @@ pipeline {
         script {
           def skipArg = params.SKIP_TESTS ? '-DskipTests=true' : ''
           def mavenCommand = "${env.MVN_FLAGS} ${params.MVN_GOALS} ${skipArg}"
-          if (isUnix()) {
-            sh "mvn ${mavenCommand}"
-          } else {
-            bat "mvn ${mavenCommand}"
+
+          // Detect pom.xml location; if absent, search recursively
+          def mvnDir = '.'
+          if (!fileExists('pom.xml')) {
+            def poms = findFiles(glob: '**/pom.xml')
+            if (poms.length == 0) {
+              error "Aucun `pom.xml` trouvé dans l'espace de travail. La build Maven est annulée."
+            }
+            mvnDir = poms[0].path - 'pom.xml'
+            if (mvnDir == '') { mvnDir = '.' }
+          }
+          echo "Running Maven in: ${mvnDir}"
+
+          dir(mvnDir) {
+            if (isUnix()) {
+              sh "mvn ${mavenCommand}"
+            } else {
+              bat "mvn ${mavenCommand}"
+            }
           }
         }
       }
@@ -163,7 +210,7 @@ pipeline {
               echo "No frontend dist artifacts to archive (pattern: ${frontendDistGlob})"
             }
           } else {
-            echo "Frontend directory '${params.FRONTEND_DIR}' not found, skipping artifact archiving"
+            echo "Frontend directory `${params.FRONTEND_DIR}` not found, skipping artifact archiving"
           }
         }
       }
